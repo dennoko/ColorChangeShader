@@ -34,6 +34,17 @@ public class MeshSlider : UdonSharpBehaviour
     MaterialPropertyBlock mpb;
     Quaternion initialLocalRotation;
 
+    // Apply() の二重呼び出し防止: 前回適用した t と異なる場合のみ SetFloat を実行する
+    float lastAppliedT = -1f;
+
+    // 同期閾値: トラック全体の 0.5% 未満の変化は送信しない (知覚不可能な差)
+    // Mathf.Approximately (~1e-5) より大きい閾値で RequestSerialization の無駄な呼び出しを削減
+    const float SYNC_THRESHOLD = 0.005f;
+
+    // Lerp の収束判定: sqrMagnitude がこの値未満なら目標位置へスナップして Lerp を終了する
+    // 0.1mm^2 = 1e-8 (実際は ~0.316mm 以内でスナップ)
+    const float SNAP_SQR_DIST = 1e-8f;
+
     void Start()
     {
         mpb = new MaterialPropertyBlock();
@@ -60,11 +71,8 @@ public class MeshSlider : UdonSharpBehaviour
         }
 
         localDir = vec / trackLen;
-
-        // ローテーションをエディタ配置時の状態で固定
         initialLocalRotation = transform.localRotation;
 
-        // Knob の初期配置から t を逆算
         syncedT = ComputeT(transform.localPosition);
         Apply(syncedT);
         SnapTo(syncedT);
@@ -79,13 +87,12 @@ public class MeshSlider : UdonSharpBehaviour
 
         if (isHeld)
         {
-            // VRC_Pickup がこのフレームで Knob をハンド位置へ移動済み
-            // → localPosition を読んでトラックへ投影
             float t = ComputeT(transform.localPosition);
             SnapTo(t);
             Apply(t);
 
-            if (Networking.IsOwner(gameObject) && !Mathf.Approximately(t, syncedT))
+            // SYNC_THRESHOLD 未満の変化は送信しない
+            if (Networking.IsOwner(gameObject) && Mathf.Abs(t - syncedT) > SYNC_THRESHOLD)
             {
                 syncedT = t;
                 RequestSerialization();
@@ -93,12 +100,17 @@ public class MeshSlider : UdonSharpBehaviour
         }
         else
         {
-            // 非保持時: syncedT の位置へスムーズ追従
-            transform.localPosition = Vector3.Lerp(
-                transform.localPosition,
-                PosAt(syncedT),
-                Time.deltaTime * 20f
-            );
+            // syncedT の位置へスムーズ追従
+            // sqrMagnitude でスナップ閾値をチェックし、収束後は Lerp を停止する
+            Vector3 targetPos = PosAt(syncedT);
+            Vector3 diff = targetPos - transform.localPosition;
+
+            if (diff.sqrMagnitude > SNAP_SQR_DIST)
+                transform.localPosition = Vector3.Lerp(transform.localPosition, targetPos, Time.deltaTime * 20f);
+            else
+                transform.localPosition = targetPos;
+
+            // lastAppliedT ガードにより、syncedT が変化したフレームのみ SetFloat を実行
             Apply(syncedT);
         }
     }
@@ -106,6 +118,7 @@ public class MeshSlider : UdonSharpBehaviour
     public override void OnPickup()
     {
         isHeld = true;
+        lastAppliedT = -1f; // 掴んだ瞬間に強制再適用
         if (!Networking.IsOwner(gameObject))
             Networking.SetOwner(Networking.LocalPlayer, gameObject);
     }
@@ -113,7 +126,6 @@ public class MeshSlider : UdonSharpBehaviour
     public override void OnDrop()
     {
         isHeld = false;
-        // トラック上の最近傍点へ即スナップ
         float t = ComputeT(transform.localPosition);
         syncedT = t;
         SnapTo(t);
@@ -122,7 +134,8 @@ public class MeshSlider : UdonSharpBehaviour
 
     public override void OnDeserialization()
     {
-        // LateUpdate の else ブランチが自動的に syncedT へ追従するため空でよい
+        // LateUpdate の else ブランチが syncedT へ自動追従するため空でよい
+        // (syncedT 更新により lastAppliedT と不一致 → Apply が自動的に実行される)
     }
 
     // ---- 内部ヘルパー ----
@@ -145,6 +158,10 @@ public class MeshSlider : UdonSharpBehaviour
 
     void Apply(float t)
     {
+        // 前回と同じ値なら SetFloat を呼ばない
+        if (Mathf.Approximately(t, lastAppliedT)) return;
+        lastAppliedT = t;
+
         float v = Mathf.Lerp(minValue, maxValue, t);
         if (targetRenderer != null)
         {
