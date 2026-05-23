@@ -32,6 +32,7 @@ public class MeshSlider : UdonSharpBehaviour
     Vector3 localDir;
     float trackLen;
     MaterialPropertyBlock mpb;
+    Quaternion initialLocalRotation;
 
     void Start()
     {
@@ -60,6 +61,9 @@ public class MeshSlider : UdonSharpBehaviour
 
         localDir = vec / trackLen;
 
+        // ローテーションをエディタ配置時の状態で固定
+        initialLocalRotation = transform.localRotation;
+
         // Knob の初期配置から t を逆算
         syncedT = ComputeT(transform.localPosition);
         Apply(syncedT);
@@ -69,6 +73,9 @@ public class MeshSlider : UdonSharpBehaviour
     void LateUpdate()
     {
         if (trackLen < 0.0001f) return;
+
+        // ピックアップ中も含め、常にローテーションを固定
+        transform.localRotation = initialLocalRotation;
 
         if (isHeld)
         {
