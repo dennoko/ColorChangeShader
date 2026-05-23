@@ -81,7 +81,10 @@ Shader "dennokoworks/ColorChangeShader"
                 float v = UNITY_ACCESS_INSTANCED_PROP(Props, _Value);
                 float emission = UNITY_ACCESS_INSTANCED_PROP(Props, _Emission);
 
-                float3 rgbColor = hsv2rgb(float3(h, s, v));
+                // ガンマ補正: スライダー0→1を知覚的に均一な明るさ分布に変換
+                // pow(v, 2.2) により暗い領域のスライダー移動量が増え、細かい調整が容易になる
+                float vGamma = pow(max(v, 0.0), 2.2);
+                float3 rgbColor = hsv2rgb(float3(h, s, vGamma));
                 
                 // Apply emission as a post-process boost (Emission 0 = base color, >0 = HDR bloom boost)
                 float3 finalColor = rgbColor * (1.0 + emission);
