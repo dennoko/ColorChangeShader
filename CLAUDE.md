@@ -28,9 +28,20 @@ VRChat 向けのリアルタイム色制御シェーダーシステム。VRCLV P
 - Unity UI `Slider` コンポーネント用の代替スクリプト（3D 非対応環境向け）
 - MeshSlider と同じ dual-target パターン（Renderer vs Material）・ネットワーク同期ロジック
 
-**Editor 拡張** — [slider/Editor/MeshSliderSetupEditor.cs](slider/Editor/MeshSliderSetupEditor.cs)
+**PostProcessWeightSlider** — [slider/PostProcessWeightSlider.cs](slider/PostProcessWeightSlider.cs)
+- VRChat のポストプロセス Weight をゲーム内で調整するための MeshSlider 派生ギミック
+- 制御対象: `VRCPostProcessing` または `Volume` コンポーネントの `weight` プロパティ
+- どちらか一方でも設定されていれば動作。両方設定すれば両方を同時制御
+- Weight 範囲は 0〜1（`minWeight` / `maxWeight` で調整可能）
+- トラック制御・ネットワーク同期ロジックは MeshSlider と同一パターン
+
+**Editor 拡張 (MeshSlider)** — [slider/Editor/MeshSliderSetupEditor.cs](slider/Editor/MeshSliderSetupEditor.cs)
 - MeshSlider の `[CustomEditor]`
 - ボタン操作で `track_start` / `track_end` の自動生成、Rigidbody（Kinematic）・Collider・VRC_Pickup の自動追加が可能
+
+**Editor 拡張 (PostProcessWeightSlider)** — [slider/Editor/PostProcessWeightSliderSetupEditor.cs](slider/Editor/PostProcessWeightSliderSetupEditor.cs)
+- PostProcessWeightSlider の `[CustomEditor]`
+- MeshSliderSetupEditor と同様のセットアップ支援機能
 
 ### 必須の GameObject 階層
 
