@@ -1,4 +1,4 @@
-﻿using UdonSharp;
+using UdonSharp;
 using UnityEngine;
 using UnityEngine.Rendering.PostProcessing;
 using VRC.SDKBase;
@@ -14,12 +14,21 @@ public class PostProcessWeightSlider : UdonSharpBehaviour
     [SerializeField] Transform trackStart;
     [SerializeField] Transform trackEnd;
 
-    [Header("制御対象")]
+    [Header("制御対象 (シングルモード)")]
     [SerializeField] PostProcessVolume targetVolume;
 
-    [Header("Weight 設定")]
+    [Header("Weight 設定 (シングルモード)")]
     [SerializeField] float minWeight = 0f;
     [SerializeField] float maxWeight = 1f;
+
+    [Header("初期値  ※ 有効にするとStart時にknobをこの位置へ移動")]
+    [SerializeField] bool useInitialValue = false;
+    [SerializeField, Range(0f, 1f)] float initialT = 0.5f;
+
+    [Header("デュアルボリュームモード  ※ 有効にするとシングルモードの設定を無視")]
+    [SerializeField] bool dualVolumeMode = false;
+    [SerializeField] PostProcessVolume volumeMin;   // t=0(min端) でWeight=1、中間でWeight=0
+    [SerializeField] PostProcessVolume volumeMax;   // t=1(max端) でWeight=1、中間でWeight=0
 
     [UdonSynced] float syncedT;
 
@@ -47,9 +56,13 @@ public class PostProcessWeightSlider : UdonSharpBehaviour
             return;
         }
 
-        if (targetVolume == null)
+        if (!dualVolumeMode && targetVolume == null)
         {
             Debug.LogWarning($"[PostProcessWeightSlider:{name}] targetVolume が未設定です。");
+        }
+        if (dualVolumeMode && volumeMin == null && volumeMax == null)
+        {
+            Debug.LogWarning($"[PostProcessWeightSlider:{name}] デュアルモード: volumeMin と volumeMax がどちらも未設定です。");
         }
 
         // trackStart / trackEnd は Knob と同じ親 (SliderParent) の子
@@ -68,7 +81,8 @@ public class PostProcessWeightSlider : UdonSharpBehaviour
         localDir = vec / trackLen;
         initialLocalRotation = transform.localRotation;
 
-        syncedT = ComputeT(transform.localPosition);
+        float startT = useInitialValue ? initialT : ComputeT(transform.localPosition);
+        syncedT = startT;
         Apply(syncedT);
         SnapTo(syncedT);
     }
@@ -153,8 +167,26 @@ public class PostProcessWeightSlider : UdonSharpBehaviour
         if (Mathf.Approximately(t, lastAppliedT)) return;
         lastAppliedT = t;
 
-        if (targetVolume != null)
-            targetVolume.weight = Mathf.Lerp(minWeight, maxWeight, t);
+        if (dualVolumeMode)
+        {
+            // 中間(t=0.5)で両方Weight=0、min端でvolumeMin=1、max端でvolumeMax=1
+            if (t <= 0.5f)
+            {
+                float wMin = (0.5f - t) * 2f;
+                if (volumeMin != null) volumeMin.weight = wMin;
+                if (volumeMax != null) volumeMax.weight = 0f;
+            }
+            else
+            {
+                if (volumeMin != null) volumeMin.weight = 0f;
+                float wMax = (t - 0.5f) * 2f;
+                if (volumeMax != null) volumeMax.weight = wMax;
+            }
+        }
+        else
+        {
+            if (targetVolume != null)
+                targetVolume.weight = Mathf.Lerp(minWeight, maxWeight, t);
+        }
     }
 }
-

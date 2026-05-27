@@ -25,6 +25,10 @@ public class MeshSlider : UdonSharpBehaviour
     [SerializeField] float minValue = 0f;
     [SerializeField] float maxValue = 1f;
 
+    [Header("初期値  ※ 有効にするとStart時にknobをこの位置へ移動")]
+    [SerializeField] bool useInitialValue = false;
+    [SerializeField, Range(0f, 1f)] float initialT = 0.5f;
+
     [UdonSynced] float syncedT;
 
     bool isHeld;
@@ -73,7 +77,8 @@ public class MeshSlider : UdonSharpBehaviour
         localDir = vec / trackLen;
         initialLocalRotation = transform.localRotation;
 
-        syncedT = ComputeT(transform.localPosition);
+        float startT = useInitialValue ? initialT : ComputeT(transform.localPosition);
+        syncedT = startT;
         Apply(syncedT);
         SnapTo(syncedT);
     }

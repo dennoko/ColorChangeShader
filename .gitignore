@@ -1,4 +1,5 @@
 *.meta
+*.asset
 Material/*
 FBX/*
 Prefab/*

@@ -30,16 +30,31 @@ public class PostProcessWeightSliderSetupEditor : Editor
         var endProp   = serializedObject.FindProperty("trackEnd");
         bool hasTrack = startProp.objectReferenceValue != null && endProp.objectReferenceValue != null;
 
-        var targetProp = serializedObject.FindProperty("targetVolume");
-        bool hasTarget = targetProp != null && targetProp.objectReferenceValue != null;
+        var dualModeProp = serializedObject.FindProperty("dualVolumeMode");
+        bool isDualMode = dualModeProp != null && dualModeProp.boolValue;
 
+        bool hasTarget;
+        if (isDualMode)
+        {
+            var volMinProp = serializedObject.FindProperty("volumeMin");
+            var volMaxProp = serializedObject.FindProperty("volumeMax");
+            hasTarget = (volMinProp != null && volMinProp.objectReferenceValue != null)
+                     || (volMaxProp != null && volMaxProp.objectReferenceValue != null);
+        }
+        else
+        {
+            var targetProp = serializedObject.FindProperty("targetVolume");
+            hasTarget = targetProp != null && targetProp.objectReferenceValue != null;
+        }
+
+        string modeLabel = isDualMode ? "Dual" : "Single";
         MessageType msgType = (hasRb && hasCol && hasPickup && hasTrack && hasTarget)
             ? MessageType.Info : MessageType.Warning;
 
         EditorGUILayout.HelpBox(
             $"Rigidbody : {Mark(hasRb)}   Collider : {Mark(hasCol)}   " +
             $"VRC_Pickup : {Mark(hasPickup)}   Track : {Mark(hasTrack)}   " +
-            $"Target : {Mark(hasTarget)}   Parent : {Mark(hasParent)}",
+            $"Target : {Mark(hasTarget)}   Parent : {Mark(hasParent)}   Mode : {modeLabel}",
             msgType
         );
 
@@ -61,6 +76,22 @@ public class PostProcessWeightSliderSetupEditor : Editor
         }
         GUI.backgroundColor = prevColor;
 
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("── 初期値ユーティリティ ──", EditorStyles.boldLabel);
+
+        var initialTProp   = serializedObject.FindProperty("initialT");
+        var useInitialProp = serializedObject.FindProperty("useInitialValue");
+
+        GUI.enabled = hasTrack;
+        if (GUILayout.Button($"初期値位置 (t = {initialTProp.floatValue:F2}) にknobを移動", GUILayout.Height(28)))
+            ApplyInitialPosition(slider);
+        GUI.enabled = true;
+
+        if (!hasTrack)
+            EditorGUILayout.HelpBox("trackStart / trackEnd を設定するとknobを移動できます。", MessageType.Info);
+        else if (!useInitialProp.boolValue)
+            EditorGUILayout.HelpBox("useInitialValue が無効のため、Start時は現在のknob位置が使用されます。", MessageType.Info);
+
         EditorGUILayout.Space(4);
         EditorGUILayout.HelpBox(
             "階層の確認:\n" +
@@ -69,8 +100,15 @@ public class PostProcessWeightSliderSetupEditor : Editor
             "  ├─ track_start\n" +
             "  └─ track_end\n\n" +
             "track_start / track_end は Knob の「兄弟」(同じ親の子) である必要があります。\n\n" +
-            "制御対象:\n" +
-            "  targetVolume: PostProcessVolume コンポーネントをアサインしてください。",
+            "[シングルモード]\n" +
+            "  targetVolume: 制御する PostProcessVolume をアサイン。\n" +
+            "  minWeight / maxWeight: スライダー両端の Weight 値。\n\n" +
+            "[デュアルボリュームモード] dualVolumeMode = ON\n" +
+            "  volumeMin: スライダー min端(t=0) でWeight=1、中間でWeight=0。\n" +
+            "  volumeMax: スライダー max端(t=1) でWeight=1、中間でWeight=0。\n" +
+            "  → 中間位置で両方Weight=0、片側に寄せると対応するVolumeが効く。\n\n" +
+            "[初期値] useInitialValue = ON\n" +
+            "  initialT(0〜1): ワールド開始時にknobをこの位置へ移動して適用。",
             MessageType.None
         );
     }
@@ -146,6 +184,24 @@ public class PostProcessWeightSliderSetupEditor : Editor
 
         EditorUtility.SetDirty(slider.gameObject);
         Debug.Log($"[PostProcessWeightSlider] {slider.name} のコンポーネントを設定しました");
+    }
+
+    void ApplyInitialPosition(PostProcessWeightSlider slider)
+    {
+        serializedObject.Update();
+        var startProp    = serializedObject.FindProperty("trackStart");
+        var endProp      = serializedObject.FindProperty("trackEnd");
+        var initialTProp = serializedObject.FindProperty("initialT");
+
+        Transform start = (Transform)startProp.objectReferenceValue;
+        Transform end   = (Transform)endProp.objectReferenceValue;
+        float t = initialTProp.floatValue;
+
+        Vector3 newPos = Vector3.Lerp(start.localPosition, end.localPosition, t);
+        Undo.RecordObject(slider.transform, "Apply Initial Position");
+        slider.transform.localPosition = newPos;
+        EditorUtility.SetDirty(slider.gameObject);
+        Debug.Log($"[PostProcessWeightSlider] {slider.name} のknob位置を initialT={t:F2} に移動しました");
     }
 
     static string Mark(bool ok) => ok ? "✓" : "✗";

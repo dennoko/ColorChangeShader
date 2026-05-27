@@ -58,6 +58,22 @@ public class MeshSliderSetupEditor : Editor
         }
         GUI.backgroundColor = prevColor;
 
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("── 初期値ユーティリティ ──", EditorStyles.boldLabel);
+
+        var initialTProp     = serializedObject.FindProperty("initialT");
+        var useInitialProp   = serializedObject.FindProperty("useInitialValue");
+
+        GUI.enabled = hasTrack;
+        if (GUILayout.Button($"初期値位置 (t = {initialTProp.floatValue:F2}) にknobを移動", GUILayout.Height(28)))
+            ApplyInitialPosition(slider);
+        GUI.enabled = true;
+
+        if (!hasTrack)
+            EditorGUILayout.HelpBox("trackStart / trackEnd を設定するとknobを移動できます。", MessageType.Info);
+        else if (!useInitialProp.boolValue)
+            EditorGUILayout.HelpBox("useInitialValue が無効のため、Start時は現在のknob位置が使用されます。", MessageType.Info);
+
         EditorGUILayout.Space(4);
         EditorGUILayout.HelpBox(
             "階層の確認:\n" +
@@ -141,6 +157,24 @@ public class MeshSliderSetupEditor : Editor
 
         EditorUtility.SetDirty(slider.gameObject);
         Debug.Log($"[MeshSlider] {slider.name} のコンポーネントを設定しました");
+    }
+
+    void ApplyInitialPosition(MeshSlider slider)
+    {
+        serializedObject.Update();
+        var startProp    = serializedObject.FindProperty("trackStart");
+        var endProp      = serializedObject.FindProperty("trackEnd");
+        var initialTProp = serializedObject.FindProperty("initialT");
+
+        Transform start = (Transform)startProp.objectReferenceValue;
+        Transform end   = (Transform)endProp.objectReferenceValue;
+        float t = initialTProp.floatValue;
+
+        Vector3 newPos = Vector3.Lerp(start.localPosition, end.localPosition, t);
+        Undo.RecordObject(slider.transform, "Apply Initial Position");
+        slider.transform.localPosition = newPos;
+        EditorUtility.SetDirty(slider.gameObject);
+        Debug.Log($"[MeshSlider] {slider.name} のknob位置を initialT={t:F2} に移動しました");
     }
 
     static string Mark(bool ok) => ok ? "✓" : "✗";
